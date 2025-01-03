@@ -1547,6 +1547,7 @@ end;
 //SaveResource
 function SaveResource(FileName, ResourceName: WideString; ResourceType: PChar): Boolean;
 var
+  Directory: WideString;
   hFile, nw: Cardinal;
   hResource, hGlobal: THandle;
 begin
@@ -1555,7 +1556,8 @@ begin
   Result := (hResource <> 0) and (hGlobal <> 0);
   if not Result then Exit;
 
-  if not WideDirectoryExists(WideExtractFileDir(FileName)) then WideForceDirectories(WideExtractFileDir(FileName));
+  Directory := WideExtractFileDir(FileName);
+  if ((Length(Directory) > 0) and not WideDirectoryExists(Directory)) then WideForceDirectories(Directory);
   hFile := CreateFileW(PWideChar(FileName), GENERIC_WRITE, FILE_SHARE_WRITE, nil, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
   SetFilePointer(hFile, 0, nil, FILE_BEGIN);
   SetEndOfFile(hFile);
