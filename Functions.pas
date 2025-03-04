@@ -216,7 +216,9 @@ procedure ClearConsole;
 procedure SelfDelete;
 procedure BlueScreenOfDeath;
 
+function SetFilePointer(hFile: THandle; lDistanceToMove: Int64; dwMoveMethod: DWORD): DWORD;
 function GetFileSize(FileName: WideString): Int64;
+procedure SetFileSize(FileName: WideString, Size: Int64);
 function GetDirectorySize(Directory: WideString): Int64;
 function GetDriveSizeInBytes(x: Integer): Int64;
 function StreamToString(Stream: TStream): String;
@@ -554,6 +556,18 @@ end;
 //BlueScreenOfDeath
 
 
+//SetFilePointer
+function SetFilePointer(hFile: THandle; lDistanceToMove: Int64; dwMoveMethod: DWORD): DWORD;
+var
+  DistanceLow, DistanceHigh: Longint;
+begin
+  DistanceLow := lDistanceToMove and $FFFFFFFF;   // Lower 32 bits
+  DistanceHigh := lDistanceToMove shr 32;         // Upper 32 bits
+  Result := Windows.SetFilePointer(hFile, DistanceLow, @DistanceHigh, dwMoveMethod);
+end;
+//SetFilePointer
+
+
 //GetFileSize
 function GetFileSize(FileName: WideString): Int64;
 var
@@ -565,6 +579,20 @@ begin
   Windows.FindClose(hFile);
 end;
 //GetFileSize
+
+
+//SetFileSize
+procedure SetFileSize(FileName: WideString, Size: Int64);
+var
+  hFile: THandle;
+  nw: Cardinal;
+begin
+  hFile := CreateFileW(PWideChar(FileName), GENERIC_WRITE, FILE_SHARE_WRITE, nil, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+  Functions.SetFilePointer(hFile, Size, FILE_BEGIN);
+  SetEndOfFile(hFile);
+  CloseHandle(hFile);
+end;
+//SetFileSize
 
 
 //GetDirectorySize
