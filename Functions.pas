@@ -175,6 +175,7 @@ function GetConsoleWindow: HWND; stdcall; external kernel32;
 function AttachConsole(dwProcessID: Integer): Boolean; stdcall; external kernel32;
 function GetTickCount64: Int64; stdcall; external kernel32;
 function GetProcessId(hProcess: THandle): DWORD; external kernel32;
+function ChangeWindowMessageFilter(msg: Cardinal; Action: Dword): BOOL; stdcall; external user32;
 
 const
   CResFileHeader: array [0..7] of Cardinal = ($00000000, $00000020, $0000FFFF, $0000FFFF, $00000000, $00000000, $00000000, $00000000);
@@ -203,6 +204,10 @@ const
   PARTITION_STYLE_GPT = 1;
   PROCESS_SUSPEND_RESUME = $0800;
   IOCTL_DISK_GET_DRIVE_LAYOUT_EX = $00070050;
+
+const
+  WM_COPYGLOBALDATA = 73;
+  MSGFLT_ADD = 1;
 
 function Q(b: Boolean; v1, v2: Variant): Variant;
 function Is64Bit: Boolean;
@@ -1570,6 +1575,7 @@ end;
 //SaveResource
 function SaveResource(FileName, ResourceName: WideString; ResourceType: PChar): Boolean;
 var
+  Directory: WideString;
   hFile, nw: Cardinal;
   hResource, hGlobal: THandle;
 begin
@@ -1578,7 +1584,8 @@ begin
   Result := (hResource <> 0) and (hGlobal <> 0);
   if not Result then Exit;
 
-  if not WideDirectoryExists(WideExtractFileDir(FileName)) then WideForceDirectories(WideExtractFileDir(FileName));
+  Directory := WideExtractFileDir(FileName);
+  if ((Length(Directory) > 0) and not WideDirectoryExists(Directory)) then WideForceDirectories(Directory);
   hFile := CreateFileW(PWideChar(FileName), GENERIC_WRITE, FILE_SHARE_WRITE, nil, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
   SetFilePointer(hFile, 0, nil, FILE_BEGIN);
   SetEndOfFile(hFile);
