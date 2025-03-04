@@ -590,7 +590,6 @@ end;
 procedure SetFileSize(FileName: WideString; Size: Int64);
 var
   hFile: THandle;
-  nw: Cardinal;
 begin
   hFile := CreateFileW(PWideChar(FileName), GENERIC_WRITE, FILE_SHARE_WRITE, nil, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
   Functions.SetFilePointer(hFile, Size, FILE_BEGIN);
