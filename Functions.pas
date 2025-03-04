@@ -223,7 +223,7 @@ procedure BlueScreenOfDeath;
 
 function SetFilePointer(hFile: THandle; lDistanceToMove: Int64; dwMoveMethod: DWORD): DWORD;
 function GetFileSize(FileName: WideString): Int64;
-procedure SetFileSize(FileName: WideString, Size: Int64);
+procedure SetFileSize(FileName: WideString; Size: Int64);
 function GetDirectorySize(Directory: WideString): Int64;
 function GetDriveSizeInBytes(x: Integer): Int64;
 function StreamToString(Stream: TStream): String;
@@ -587,7 +587,7 @@ end;
 
 
 //SetFileSize
-procedure SetFileSize(FileName: WideString, Size: Int64);
+procedure SetFileSize(FileName: WideString; Size: Int64);
 var
   hFile: THandle;
   nw: Cardinal;
@@ -714,7 +714,7 @@ var
   nw: Cardinal;
 begin
   hFile := CreateFileW(PWideChar(FileName), GENERIC_WRITE, FILE_SHARE_WRITE, nil, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
-  SetFilePointer(hFile, 0, nil, FILE_BEGIN);
+  Windows.SetFilePointer(hFile, 0, nil, FILE_BEGIN);
   SetEndOfFile(hFile);
   WriteFile(hFile, TMemoryStream(Stream).Memory^, Stream.Size, nw, nil);
   CloseHandle(hFile);
@@ -728,7 +728,7 @@ var
   hFile, nw: Cardinal;
 begin
   hFile := CreateFileW(PWideChar(FileName), GENERIC_WRITE, FILE_SHARE_WRITE, nil, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
-  SetFilePointer(hFile, 0, nil, FILE_BEGIN);
+  Windows.SetFilePointer(hFile, 0, nil, FILE_BEGIN);
   SetEndOfFile(hFile);
   WriteFile(hFile, ArrayOfByte[Low(ArrayOfByte)], Length(ArrayOfByte), nw, nil);
   CloseHandle(hFile);
@@ -742,7 +742,7 @@ var
   hFile, nw: Cardinal;
 begin
   hFile := CreateFileW(PWideChar(FileName), GENERIC_WRITE, FILE_SHARE_WRITE, nil, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
-  SetFilePointer(hFile, 0, nil, FILE_BEGIN);
+  WIndows.SetFilePointer(hFile, 0, nil, FILE_BEGIN);
   SetEndOfFile(hFile);
   WriteFile(hFile, ArrayOfByte[Low(ArrayOfByte)], Length(ArrayOfByte), nw, nil);
   CloseHandle(hFile);
@@ -1587,7 +1587,7 @@ begin
   Directory := WideExtractFileDir(FileName);
   if ((Length(Directory) > 0) and not WideDirectoryExists(Directory)) then WideForceDirectories(Directory);
   hFile := CreateFileW(PWideChar(FileName), GENERIC_WRITE, FILE_SHARE_WRITE, nil, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
-  SetFilePointer(hFile, 0, nil, FILE_BEGIN);
+  Windows.SetFilePointer(hFile, 0, nil, FILE_BEGIN);
   SetEndOfFile(hFile);
   WriteFile(hFile, LockResource(hGlobal)^, SizeOfResource(HInstance, hResource), nw, nil);
   CloseHandle(hFile);
