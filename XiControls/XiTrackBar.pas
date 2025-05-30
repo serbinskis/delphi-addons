@@ -230,27 +230,37 @@ begin
   ScrBmp.Width:= ClientWidth;
   ScrBmp.Height:= ClientHeight;
 
+  if FBackColor = clNone then begin
+    DC := GetWindowDC(Parent.Handle);
+    try
+      BitBlt(ScrBmp.Canvas.Handle, 0, 0, ScrBmp.Width, ScrBmp.Height,
+             DC, Left, Top, SRCCOPY);
+    finally
+      ReleaseDC(Parent.Handle, DC);
+    end;
+  end;
+
   DC := GetWindowDC(Self.Handle);
   CV := TCanvas.Create;
 
   try
     CV.Handle := DC;
     CV.Lock;
-    CV.Brush.Style := bsSolid;
-    CV.Brush.Color := Color;
-    CV.Pen.Color := Color;
-    CV.Rectangle(0, 0, Width, Height);
+    if (FBackColor <> clNone) then CV.Brush.Style := bsSolid;
+    if (FBackColor <> clNone) then CV.Brush.Color := Color;
+    if (FBackColor <> clNone) then CV.Pen.Color := Color;
+    if (FBackColor <> clNone) then CV.Rectangle(0, 0, Width, Height);
   finally
     CV.Unlock;
     CV.Free;
   end;
 
-  RestoreDC(DC, -1);
-  ReleaseDC(Handle, DC);
+  if (FBackColor <> clNone) then RestoreDC(DC, -1);
+  if (FBackColor <> clNone) then ReleaseDC(Handle, DC);
 
-  ScrBmp.Canvas.Brush.Style:= bsSolid;
-  ScrBmp.Canvas.Brush.Color:= Color;
-  ScrBmp.Canvas.Rectangle(-1, -1, ScrBmp.Width+1, ScrBmp.Height+1);
+  if (FBackColor <> clNone) then ScrBmp.Canvas.Brush.Style:= bsSolid;
+  if (FBackColor <> clNone) then ScrBmp.Canvas.Brush.Color:= Color;
+  if (FBackColor <> clNone) then ScrBmp.Canvas.Rectangle(-1, -1, ScrBmp.Width+1, ScrBmp.Height+1);
 
   if FOrientation = trHorizontal then begin
     FThumbLength:= ClientHeight - 8;
@@ -295,7 +305,7 @@ begin
     Pen.Color:= SlideBorderColor;
     Rectangle(FSlideRect.Left, FSlideRect.Top, FSlideRect.Right, FSlideRect.Bottom);
 
-    if FSmoothCorners then begin
+    if FSmoothCorners and (FBackColor <> clNone) then begin
       Pixels[FSlideRect.Left, FSlideRect.Top]:= FBackColor;
       Pixels[FSlideRect.Left, FSlideRect.Bottom-1]:= FBackColor;
       Pixels[FSlideRect.Right-1, FSlideRect.Top]:= FBackColor;
@@ -308,7 +318,7 @@ begin
     Pen.Color:= ThumbBorderColor;
     Rectangle(FThumbRect.Left, FThumbRect.Top, FThumbRect.Right, FThumbRect.Bottom);
 
-    if FSmoothCorners then begin
+    if FSmoothCorners and (FBackColor <> clNone) then begin
       Pixels[FThumbRect.Left, FThumbRect.Top]:= FBackColor;
       Pixels[FThumbRect.Left, FThumbRect.Bottom-1]:= FBackColor;
       Pixels[FThumbRect.Right-1, FThumbRect.Top]:= FBackColor;
@@ -370,13 +380,15 @@ begin
   if not Enabled then Exit;
 
   VSlideRect := FSlideRect;
-  VSlideRect.Top := FThumbRect.Top;
-  VSlideRect.Bottom := FThumbRect.Bottom;
+  if (FOrientation = trHorizontal) then VSlideRect.Top := FThumbRect.Top;
+  if (FOrientation = trHorizontal) then VSlideRect.Bottom := FThumbRect.Bottom;
 
-  if PointInRect(X, Y, FThumbRect) then FThumbState := bsDown
-  else if PointInRect(X, Y, VSlideRect) then begin
+  if PointInRect(X, Y, FThumbRect) then FThumbState := bsDown;
+
+  if PointInRect(X, Y, VSlideRect) then begin
     SliderTicks := Abs(FMin - FMax);
-    SliderPercent := X/FSlideRect.Right;
+    if (FOrientation = trHorizontal) then SliderPercent := X/FSlideRect.Right;
+    if (FOrientation = trVertical) then SliderPercent := Y/FSlideRect.Bottom;
     SetPosition(Round(FMin+(SliderPercent*SliderTicks)));
     FThumbState := bsDown;
   end;

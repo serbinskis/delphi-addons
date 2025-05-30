@@ -19,7 +19,7 @@ const
 
 const
   TEMP_FOLDER_NAME = '9343b833-e7af-42ea-8a61-31bc41eefe2b';
-  DLL_NVSPAPI = 'C:/Program Files (x86)/NVIDIA Corporation/ShadowPlay/nvspapi.dll';
+  DLL_NVSPAPI = 'C:\Program Files\NVIDIA Corporation\NVIDIA App\ShadowPlay\nvspapi64.dll';
 
 type
   TCreateShadowPlayApiProxyInterface = packed record
