@@ -22,12 +22,14 @@ const
   EC_CPU_TEMP_ADRRESS = $68;
 
 const //Vector 16 HX A14VHG
+  EC_FAN_1_0 = $71;
   EC_FAN_1_1 = $72;
   EC_FAN_1_2 = $73;
   EC_FAN_1_3 = $74;
   EC_FAN_1_4 = $75;
   EC_FAN_1_5 = $76;
   EC_FAN_1_6 = $77;
+  EC_FAN_2_0 = $89;
   EC_FAN_2_1 = $8A;
   EC_FAN_2_2 = $8B;
   EC_FAN_2_3 = $8C;
@@ -74,7 +76,8 @@ type
       function isWebcamEnabled: Boolean;
       procedure SetBasicMode(Value: Integer);
       procedure SetFanMode(mode: TModeType);
-      procedure SetScenario(Scenario: TScenarioType; CPUFanSpeed: PFanSpeedArray; GPUFanSpeed: PFanSpeedArray);
+      procedure SetScenario(Scenario: TScenarioType; CpuFan0: Integer; GpuFan0: Integer; CPUFanSpeed: PFanSpeedArray; GPUFanSpeed: PFanSpeedArray); overload;
+      procedure SetScenario(Scenario: TScenarioType; CPUFanSpeed: PFanSpeedArray; GPUFanSpeed: PFanSpeedArray); overload;
       procedure SetCoolerBoostEnabled(bool: Boolean);
       procedure SetWebcamEnabled(bool: Boolean);
       procedure ToggleCoolerBoost;
@@ -120,13 +123,14 @@ end;
 function TMSIController.readByte(bRegister: Byte): Byte;
 begin
   Result := 255;
-  while (not EC.readByte(bRegister, Result)) or (Result = 255) do Sleep(0);
+  while (not EC.readByte(bRegister, Result)) or (Result = 255) do Sleep(1);
 end;
 
 
 procedure TMSIController.writeByte(bRegister, value: Byte);
 begin
   while (self.readByte(bRegister) <> value) do EC.writeByte(bRegister, value);
+  Sleep(1); //Do extra delay, sometimes it writes false positives
 end;
 
 
@@ -175,18 +179,21 @@ begin
   Result := scenarioCoolerBoost;
   if (self.isCoolerBoostEnabled()) then Exit;
 
+  //Check for two simple scenarios
   bResult := self.readByte(EC_SCENARIO_ADDRESS);
   if (bResult = EC_SCENARIO_SILENT) then Result := scenarioSilent;
   if (bResult = EC_SCENARIO_BALANCED) then Result := scenarioBalanced;
-  if (bResult <> EC_SCENARIO_EXTREME) then Exit;
 
-  bResult := self.readByte(EC_FAN_MODE_ADDRESS);
+  //If we have extreme mode, we need to check which subclass of it we have
+  if (bResult = EC_SCENARIO_EXTREME) then bResult := self.readByte(EC_FAN_MODE_ADDRESS);
   if (bResult = EC_FAN_MODE_AUTO) then Result := scenarioAuto;
   if (bResult = EC_FAN_MODE_ADVANCED) then Result := scenarioAdvanced;
+
+  //If in the end we still have cooler boost, it means that we had issue reading data
+  if (Result = scenarioCoolerBoost) then Result := GetScenario;
 end;
 
-
-procedure TMSIController.SetScenario(Scenario: TScenarioType; CPUFanSpeed: PFanSpeedArray; GPUFanSpeed: PFanSpeedArray);
+procedure TMSIController.SetScenario(Scenario: TScenarioType; CpuFan0: Integer; GpuFan0: Integer; CPUFanSpeed: PFanSpeedArray; GPUFanSpeed: PFanSpeedArray);
 begin
   self.SetCoolerBoostEnabled(Scenario = scenarioCoolerBoost);
 
@@ -219,6 +226,15 @@ begin
     self.writeByte(EC_FAN_2_5, Byte(GPUFanSpeed^[4]));
     self.writeByte(EC_FAN_2_6, Byte(GPUFanSpeed^[5]));
   end;
+
+  if (CpuFan0 > -1) then self.writeByte(EC_FAN_1_0, CpuFan0);
+  if (GpuFan0 > -1) then self.writeByte(EC_FAN_2_0, GpuFan0);
+end;
+
+
+procedure TMSIController.SetScenario(Scenario: TScenarioType; CPUFanSpeed: PFanSpeedArray; GPUFanSpeed: PFanSpeedArray);
+begin
+  self.SetScenario(Scenario, -1, -1, CPUFanSpeed, GPUFanSpeed);
 end;
 
 
@@ -231,7 +247,7 @@ end;
 function TMSIController.isCoolerBoostEnabled: Boolean;
 begin
   if (not self.isECLoaded(True)) then begin Result := False; Exit; end;
-  Result := (self.readByte(EC_CB_ADDRESS) >= EC_CB_ON);
+  Result := (self.readByte(EC_CB_ADDRESS) = EC_CB_ON);
 end;
 
 
