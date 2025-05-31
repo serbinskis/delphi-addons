@@ -1,7 +1,7 @@
 unit EmbeddedController;
 
 {
-Recoded to Delphi 7: WobbyChip
+Recoded to Delphi 7: Serbinskis
 Original: https://github.com/Soberia/EmbeddedController
 }
 
