@@ -7,17 +7,17 @@ uses
 
 const
   EC_LOADED_RETRY = 20;
-  EC_WEBCAM_ADDRESS = $2E; //Deprecated Vector 16 HX A14VHG
-  EC_WEBCAM_ON = $4B; //Deprecated Vector 16 HX A14VHG
-  EC_WEBCAM_OFF = $49; //Deprecated Vector 16 HX A14VHG
+  EC_WEBCAM_ADDRESS = $2E; //Deprecated GL65 9SE
+  EC_WEBCAM_ON = $4B; //Deprecated GL65 9SE
+  EC_WEBCAM_OFF = $49; //Deprecated GL65 9SE
   EC_CB_ADDRESS = $98;
   EC_CB_ON = $80;
   EC_CB_OFF = $00;
-  EC_FANS_ADRRESS = $F4; //Deprecated Vector 16 HX A14VHG
-  EC_FANS_SPEED_ADRRESS = $F5; //Deprecated Vector 16 HX A14VHG
-  EC_FANS_MODE_AUTO = $0C; //Deprecated Vector 16 HX A14VHG
-  EC_FANS_MODE_BASIC = $4C; //Deprecated Vector 16 HX A14VHG
-  EC_FANS_MODE_ADVANCED = $8C; //Deprecated Vector 16 HX A14VHG
+  EC_FANS_ADRRESS = $F4; //Deprecated GL65 9SE
+  EC_FANS_SPEED_ADRRESS = $F5; //Deprecated GL65 9SE
+  EC_FANS_MODE_AUTO = $0C; //Deprecated GL65 9SE
+  EC_FANS_MODE_BASIC = $4C; //Deprecated GL65 9SE
+  EC_FANS_MODE_ADVANCED = $8C; //Deprecated GL65 9SE
   EC_GPU_TEMP_ADRRESS = $80;
   EC_CPU_TEMP_ADRRESS = $68;
 
