@@ -48,6 +48,10 @@ const //Vector 16 HX A14VHG
   EC_FAN_MODE_SILENT = $1D;
   EC_FAN_MODE_ADVANCED = $8D;
 
+const
+  EC_DEFAULT_CPU_FAN_SPEED: array[0..5] of Byte = (0, 40, 48, 60, 75, 89);
+  EC_DEFAULT_GPU_FAN_SPEED: array[0..5] of Byte = (0, 48, 60, 70, 82, 93);
+
 type
   TModeType = (modeAuto, modeBasic, modeAdvanced);
   TScenarioType = (scenarioSilent, scenarioBalanced, scenarioAuto, scenarioCoolerBoost, scenarioAdvanced);
@@ -61,7 +65,8 @@ type
        EC: TEmbeddedController;
        hasEC: Boolean;
        function readByte(bRegister: Byte): Byte;
-       procedure writeByte(bRegister, value: Byte);
+       procedure writeByte(bRegister, value: Byte); overload;
+       procedure writeByte(bRegister, value: Byte; times: Integer); overload;
     public
       constructor Create;
       destructor Destroy; override;
@@ -134,6 +139,14 @@ begin
 end;
 
 
+procedure TMSIController.writeByte(bRegister, value: Byte; times: Integer);
+var
+  i: Integer;
+begin
+  for i := 1 to times do self.writeByte(bRegister, value);
+end;
+
+
 function TMSIController.GetGPUTemp: Byte;
 begin
   if (not self.isECLoaded(True)) then begin Result := 0; Exit; end;
@@ -193,6 +206,14 @@ begin
   if (Result = scenarioCoolerBoost) then Result := GetScenario;
 end;
 
+//MSI Control Center Behaviour:
+//Silent: Changes Max CPU TDP To 15 (Automaitc), Changes Scenario Mode, Does Not Change Advanced Fan Speeds (Uses Default)
+//Balanced: Changes Scenario Mode, Does Not Affect Advanced Fan Speeds (Uses Default)
+//Auto: Changes Scenario Mode, Changes Fan Mode, Does Not Affect Advanced Fan Speeds (Uses Default)
+//Cooler Boost: Changes Scenario Mode, Enables Cooler Boost, Does Not Affect Advanced Fan Speeds (Uses Default)
+//Advanced: Changes Scenario Mode, Changes Fan Mode, Does Affect Advanced Fan Speeds (Uses Custom)
+//CPU_FAN_0, GPU_FAN_0: Used To Reset Fan Speeds, Is Not Persistent, Values Constantly Change
+
 procedure TMSIController.SetScenario(Scenario: TScenarioType; CpuFan0: Integer; GpuFan0: Integer; CPUFanSpeed: PFanSpeedArray; GPUFanSpeed: PFanSpeedArray);
 begin
   self.SetCoolerBoostEnabled(Scenario = scenarioCoolerBoost);
@@ -208,7 +229,7 @@ begin
   if (Scenario = scenarioAuto) then self.writeByte(EC_FAN_MODE_ADDRESS, EC_FAN_MODE_AUTO);
   if (Scenario = scenarioAdvanced) then self.writeByte(EC_FAN_MODE_ADDRESS, EC_FAN_MODE_ADVANCED);
 
-  //If scenario advanced, then we need to write also fans speed data
+  //If custom fan data, then we need to write also cpu fan speeds data (can be used in any mode, but better to only use in advanced)
   if Assigned(CPUFanSpeed) then begin
     self.writeByte(EC_FAN_1_1, Byte(CPUFanSpeed^[0]));
     self.writeByte(EC_FAN_1_2, Byte(CPUFanSpeed^[1]));
@@ -218,6 +239,7 @@ begin
     self.writeByte(EC_FAN_1_6, Byte(CPUFanSpeed^[5]));
   end;
 
+  //If custom fan speeds, then we need to write also gpu fan speeds data (can be used in any mode, but better to only use in advanced)
   if Assigned(GPUFanSpeed) then begin
     self.writeByte(EC_FAN_2_1, Byte(GPUFanSpeed^[0]));
     self.writeByte(EC_FAN_2_2, Byte(GPUFanSpeed^[1]));
@@ -227,8 +249,30 @@ begin
     self.writeByte(EC_FAN_2_6, Byte(GPUFanSpeed^[5]));
   end;
 
-  if (CpuFan0 > -1) then self.writeByte(EC_FAN_1_0, CpuFan0);
-  if (GpuFan0 > -1) then self.writeByte(EC_FAN_2_0, GpuFan0);
+  //If no custom fan speeds, and mode isn't advanced, then use default ones
+  if (not Assigned(CPUFanSpeed) and (Scenario <> scenarioAdvanced)) then begin
+    self.writeByte(EC_FAN_1_1, EC_DEFAULT_CPU_FAN_SPEED[0]);
+    self.writeByte(EC_FAN_1_2, EC_DEFAULT_CPU_FAN_SPEED[1]);
+    self.writeByte(EC_FAN_1_3, EC_DEFAULT_CPU_FAN_SPEED[2]);
+    self.writeByte(EC_FAN_1_4, EC_DEFAULT_CPU_FAN_SPEED[3]);
+    self.writeByte(EC_FAN_1_5, EC_DEFAULT_CPU_FAN_SPEED[4]);
+    self.writeByte(EC_FAN_1_6, EC_DEFAULT_CPU_FAN_SPEED[5]);
+  end;
+
+  //If no custom fan speeds, and mode isn't advanced, then use default ones
+  if (not Assigned(CPUFanSpeed) and (Scenario <> scenarioAdvanced)) then begin
+    self.writeByte(EC_FAN_2_1, EC_DEFAULT_GPU_FAN_SPEED[0]);
+    self.writeByte(EC_FAN_2_2, EC_DEFAULT_GPU_FAN_SPEED[1]);
+    self.writeByte(EC_FAN_2_3, EC_DEFAULT_GPU_FAN_SPEED[2]);
+    self.writeByte(EC_FAN_2_4, EC_DEFAULT_GPU_FAN_SPEED[3]);
+    self.writeByte(EC_FAN_2_5, EC_DEFAULT_GPU_FAN_SPEED[4]);
+    self.writeByte(EC_FAN_2_6, EC_DEFAULT_GPU_FAN_SPEED[5]);
+  end;
+
+  //We can change these values, to rapidly stop or accelerate fans
+  //Attempt writing multiple times, to ensure correct result
+  if (CpuFan0 > -1) then self.writeByte(EC_FAN_1_0, CpuFan0, 2);
+  if (GpuFan0 > -1) then self.writeByte(EC_FAN_2_0, GpuFan0, 2);
 end;
 
 
