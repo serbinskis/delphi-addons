@@ -54,7 +54,7 @@ const
 
 type
   TModeType = (modeAuto, modeBasic, modeAdvanced);
-  TScenarioType = (scenarioUnknow, scenarioSilent, scenarioBalanced, scenarioAuto, scenarioCoolerBoost, scenarioAdvanced);
+  TScenarioType = (scenarioUnknown, scenarioSilent, scenarioBalanced, scenarioAuto, scenarioCoolerBoost, scenarioAdvanced);
   TFanSpeedArray = array[0..5] of Integer;
   PFanSpeedArray = ^TFanSpeedArray;
 
