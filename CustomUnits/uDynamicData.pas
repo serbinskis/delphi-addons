@@ -92,6 +92,7 @@ type
 
       function CreateData(Index: Integer): Integer; overload;
       function CreateData(Index, pDupe: Integer; Names: array of WideString; Values: array of Variant): Integer; overload;
+      function CreateDatas(Name: WideString; Values: Variant): Integer;
       procedure DeleteData(Index: Integer);
       procedure MoveData(FromIndex, ToIndex: Integer);
       procedure ClearAllData;
@@ -773,6 +774,19 @@ begin
   if (pDupe > -1) and (FindIndex(0, Names[pDupe], Values[pDupe]) > -1) then Exit;
   Result := CreateData(Index);
   for i := 0 to Length(Names)-1 do SetValue(Result, Names[i], Values[i]);
+end;
+
+
+function TDynamicData.CreateDatas(Name: WideString; Values: Variant): Integer;
+var
+  i: Integer;
+begin
+  Result := -1;
+  if not VarIsArray(Values) then Exit;
+
+  for i := VarArrayLowBound(Values, 1) to VarArrayHighBound(Values, 1) do begin
+    Result := CreateData(-1, -1, [Name], [Values[i]]);
+  end;
 end;
 
 

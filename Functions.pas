@@ -208,6 +208,7 @@ const
 const
   WM_COPYGLOBALDATA = 73;
   MSGFLT_ADD = 1;
+  TH32CS_SNAPMODULE32 = $00000010;
 
 function Q(b: Boolean; v1, v2: Variant): Variant;
 function Is64Bit: Boolean;
@@ -259,7 +260,9 @@ function ExecuteWait(FileName, Params: WideString; nShow: Integer): Cardinal;
 function ExecuteProcess(FileName, Params: WideString; nShow: Integer): THandle;
 function ExecuteProcessAsAdmin(FileName, Params: WideString; nShow: Integer): THandle;
 function WideWinExec(CommandLine: WideString; nShow: Integer): TProcessInformation;
-function GetProcessChildren(processId: DWORD): TArrayOfDWORD;
+function GetProcessByName(ProcessName: WideString): TArrayOfDWORD;
+function GetProcessChildren(ProcessId: DWORD): TArrayOfDWORD;
+function IsModuleLoadedInProcess(ProcessId: DWORD; ModuleName: WideString): Boolean;
 function KillTask(FileName: WideString): Boolean;
 function ProcessExists(FileName: WideString): Boolean;
 function PIDExists(PID: DWORD): Boolean;
@@ -1136,8 +1139,8 @@ end;
 //WideWinExec
 
 
-//GetProcessChildren
-function GetProcessChildren(processId: DWORD): TArrayOfDWORD;
+//GetProcessByName
+function GetProcessByName(ProcessName: WideString): TArrayOfDWORD;
 var
   ContinueLoop: Boolean;
   SnapshotHandle: THandle;
@@ -1149,14 +1152,60 @@ begin
   ContinueLoop := Process32FirstW(SnapshotHandle, ProcessEntry);
 
   while ContinueLoop do begin
-    if (ProcessEntry.th32ParentProcessID = processId) then SetLength(Result, Length(Result)+1);
-    if (ProcessEntry.th32ParentProcessID = processId) then Result[Length(Result)-1] := ProcessEntry.th32ProcessID;
+    if WideSameText(ProcessEntry.szExeFile, ProcessName) then SetLength(Result, Length(Result)+1);
+    if WideSameText(ProcessEntry.szExeFile, ProcessName) then Result[Length(Result)-1] := ProcessEntry.th32ProcessID;
+    ContinueLoop := Process32NextW(SnapshotHandle, ProcessEntry);
+  end;
+
+  CloseHandle(SnapshotHandle);
+end;
+//GetProcessByName
+
+
+//GetProcessChildren
+function GetProcessChildren(ProcessId: DWORD): TArrayOfDWORD;
+var
+  ContinueLoop: Boolean;
+  SnapshotHandle: THandle;
+  ProcessEntry: TProcessEntry32W;
+begin
+  SetLength(Result, 0);
+  SnapshotHandle := CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  ProcessEntry.dwSize := SizeOf(ProcessEntry);
+  ContinueLoop := Process32FirstW(SnapshotHandle, ProcessEntry);
+
+  while ContinueLoop do begin
+    if (ProcessEntry.th32ParentProcessID = ProcessId) then SetLength(Result, Length(Result)+1);
+    if (ProcessEntry.th32ParentProcessID = ProcessId) then Result[Length(Result)-1] := ProcessEntry.th32ProcessID;
     ContinueLoop := Process32NextW(SnapshotHandle, ProcessEntry);
   end;
 
   CloseHandle(SnapshotHandle);
 end;
 //GetProcessChildren
+
+
+//IsModuleLoadedInProcess
+function IsModuleLoadedInProcess(ProcessId: DWORD; ModuleName: WideString): Boolean;
+var
+  ContinueLoop: Boolean;
+  SnapshotHandle: THandle;
+  ModuleEntry: TModuleEntry32W;
+begin
+  Result := False;
+  SnapshotHandle := CreateToolhelp32Snapshot(TH32CS_SNAPMODULE or TH32CS_SNAPMODULE32, 0);
+  if (SnapshotHandle = INVALID_HANDLE_VALUE) then Exit;
+  ModuleEntry.dwSize := SizeOf(TModuleEntry32W);
+  ContinueLoop := Module32FirstW(SnapshotHandle, ModuleEntry);
+
+  while ContinueLoop do begin
+    if WideSameText(ModuleEntry.szModule, ModuleName) then Result := True;
+    ContinueLoop := Module32NextW(SnapshotHandle, ModuleEntry);
+  end;
+
+  CloseHandle(SnapshotHandle);
+end;
+//IsModuleLoadedInProcess
 
 
 //KillTask
