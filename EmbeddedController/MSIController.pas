@@ -245,6 +245,7 @@ end;
 
 procedure TMSIController.SetScenario(Scenario: TScenarioType; CpuFan0: Integer; GpuFan0: Integer; CPUFanSpeed: PFanSpeedArray; GPUFanSpeed: PFanSpeedArray);
 begin
+  if (not self.IsECLoaded(True)) then Exit;
   self.SetCoolerBoostEnabled(Scenario = scenarioCoolerBoost);
 
   //Change scenario value, based on scenario
