@@ -5,6 +5,8 @@ interface
 uses
   Windows, StrUtils, SysUtils, ActiveX, ComObj, Variants, EmbeddedController;
 
+//Ignore Addresses: 46,48,4a,4c,cb,cc,dd,f4,c9,47,68
+
 const
   EC_LOADED_RETRY = 20;
   EC_WEBCAM_ADDRESS = $2E; //Deprecated GL65 9SE
@@ -49,7 +51,7 @@ const //Vector 16 HX A14VHG
   EC_FAN_MODE_ADVANCED = $8D;
 
 const
-  MSI_BIOS_SERIAL_NUMBER_PREFIX = '9S7';
+  MSI_BIOS_SERIAL_NUMBER_PREFIX: array [0..1] of String = ('9S7', 'K24');
   EC_DEFAULT_CPU_FAN_SPEED: array[0..5] of Byte = (0, 40, 48, 60, 75, 89);
   EC_DEFAULT_GPU_FAN_SPEED: array[0..5] of Byte = (0, 48, 60, 70, 82, 93);
 
@@ -100,13 +102,17 @@ var
   bDummy: Byte;
 begin
   inherited Create;
+  serialNumber := self.GetSerialNumber;
   EC := TEmbeddedController.Create;
   EC.retry := 5;
-  hasEC := False;
   j := 0; k := 0;
 
-  serialNumber := self.GetSerialNumber;
-  if (not AnsiStartsStr(MSI_BIOS_SERIAL_NUMBER_PREFIX, serialNumber)) then Exit;
+  for i := 0 to Length(MSI_BIOS_SERIAL_NUMBER_PREFIX) do begin
+    hasEC := AnsiStartsStr(MSI_BIOS_SERIAL_NUMBER_PREFIX[i], serialNumber);
+    if hasEC then Break;
+  end;
+
+  if (not hasEC) then Exit;
 
   for i := 1 to EC_LOADED_RETRY do begin
     hasEC := EC.ReadByte(0, bDummy);
