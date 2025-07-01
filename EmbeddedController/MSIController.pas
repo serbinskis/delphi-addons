@@ -107,7 +107,7 @@ begin
   EC.retry := 5;
   j := 0; k := 0;
 
-  for i := 0 to Length(MSI_BIOS_SERIAL_NUMBER_PREFIX) do begin
+  for i := 0 to Length(MSI_BIOS_SERIAL_NUMBER_PREFIX)-1 do begin
     hasEC := AnsiStartsStr(MSI_BIOS_SERIAL_NUMBER_PREFIX[i], serialNumber);
     if hasEC then Break;
   end;
