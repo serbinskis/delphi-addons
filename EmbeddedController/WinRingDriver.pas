@@ -1,4 +1,4 @@
-unit ECDriver;
+unit WinRingDriver;
 
 interface
 
@@ -28,6 +28,8 @@ const
   IOCTL_OLS_GET_REFCOUNT = (OLS_TYPE shl 16) or (FILE_ANY_ACCESS shl 14) or ($801 shl 2) or METHOD_BUFFERED;
   IOCTL_OLS_READ_IO_PORT_BYTE = (OLS_TYPE shl 16) or (FILE_READ_ACCESS shl 14) or ($833 shl 2) or METHOD_BUFFERED;
   IOCTL_OLS_WRITE_IO_PORT_BYTE = (OLS_TYPE shl 16) or (FILE_WRITE_ACCESS shl 14) or ($836 shl 2) or METHOD_BUFFERED;
+  IOCTL_OLS_READ_MSR = (OLS_TYPE shl 16) or (FILE_ANY_ACCESS shl 14) or ($821 shl 2) or METHOD_BUFFERED;
+  IOCTL_OLS_WRITE_MSR = (OLS_TYPE shl 16) or (FILE_ANY_ACCESS shl 14) or ($822 shl 2) or METHOD_BUFFERED;
 
 const
   OLS_DLL_NO_ERROR = 0;
@@ -72,7 +74,7 @@ type
 
 
 type
-  TECDriver = class(TDriverManager)
+  TWinRingDriver = class(TDriverManager)
     private
       gDriverPath: WideString;
       gInitDll: Boolean;
@@ -91,6 +93,8 @@ type
       procedure deinitialize;
       function readIoPortByte(port: Byte): Byte;
       procedure writeIoPortByte(port, value: Byte);
+      function readMsr(msrIndex: DWORD; var eax, edx: DWORD): Boolean;
+      function writeMsr(msrIndex: DWORD; eax, edx: DWORD): Boolean;
   end;
 
 implementation
@@ -291,7 +295,7 @@ end;
 //=======================================================
 
 
-constructor TECDriver.Create;
+constructor TWinRingDriver.Create;
 begin
   inherited Create;
   gInitDll := False;
@@ -300,14 +304,14 @@ begin
 end;
 
 
-destructor TECDriver.Destroy;
+destructor TWinRingDriver.Destroy;
 begin
   deinitialize;
   inherited Destroy;
 end;
 
 
-function TECDriver.driverFileExistence: Byte;
+function TWinRingDriver.driverFileExistence: Byte;
 var
   hFile: Cardinal;
   findData: WIN32_FIND_DATAW;
@@ -347,7 +351,7 @@ begin
 end;
 
 
-function TECDriver.initialize: Boolean;
+function TWinRingDriver.initialize: Boolean;
 var
   i: Integer;
 begin
@@ -380,7 +384,7 @@ begin
 end;
 
 
-procedure TECDriver.deinitialize;
+procedure TWinRingDriver.deinitialize;
 var
   isHandel: Boolean;
   length, refCount: DWORD;
@@ -409,7 +413,7 @@ begin
 end;
 
 
-function TECDriver.readIoPortByte(port: Byte): Byte;
+function TWinRingDriver.readIoPortByte(port: Byte): Byte;
 var
   value: Byte;
 begin
@@ -419,7 +423,7 @@ begin
 end;
 
 
-procedure TECDriver.writeIoPortByte(port, value: Byte);
+procedure TWinRingDriver.writeIoPortByte(port, value: Byte);
 var
   inBuf: OLS_WRITE_IO_PORT_INPUT;
   nInBufferSize: Cardinal;
@@ -428,6 +432,28 @@ begin
   inBuf.CharData := value;
   nInBufferSize := NativeUInt(@OLS_WRITE_IO_PORT_INPUT(nil^).CharData) + SizeOf(inBuf.CharData);
   bResult := DeviceIoControl(gHandle, Cardinal(IOCTL_OLS_WRITE_IO_PORT_BYTE), @inBuf, nInBufferSize, nil, 0, bytesReturned, nil);
+end;
+
+
+function TWinRingDriver.readMsr(msrIndex: DWORD; var eax, edx: DWORD): Boolean;
+var
+  inBuf: DWORD;
+  outBuf: array[0..1] of DWORD;
+begin
+  Result := DeviceIoControl(gHandle, Cardinal(IOCTL_OLS_READ_MSR), @msrIndex, SizeOf(inBuf), @outBuf, SizeOf(outBuf), bytesReturned, nil);
+  eax := outBuf[0];
+  edx := outBuf[1];
+end;
+
+
+function TWinRingDriver.writeMsr(msrIndex: DWORD; eax, edx: DWORD): Boolean;
+var
+  inBuf: array[0..2] of DWORD;
+begin
+  inBuf[0] := msrIndex;
+  inBuf[1] := eax;
+  inBuf[2] := edx;
+  Result := DeviceIoControl(gHandle, Cardinal(IOCTL_OLS_WRITE_MSR), @inBuf, SizeOf(inBuf), nil, 0, bytesReturned, nil);
 end;
 
 end.

@@ -14,6 +14,9 @@ uses
   Windows, Classes, Controls, Graphics, Messages, Forms, Dialogs,
   Math, SysUtils, ExtCtrls, ComCtrls;
 
+const
+  CM_WANTARROWS = CM_BASE + 10;
+
 type
   TColorScheme = (csCustom, csDesert, csGrass, csSilver, csSky, csRose, csSun);
   TBtnState = (bsUp, bsOver, bsDown, bsOut);
@@ -55,6 +58,9 @@ type
     FOnMouseDown: TNotifyEvent;
     FOnMouseMove: TNotifyEvent;
     FOnMouseUp: TNotifyEvent;
+    FOnKeyDown: TKeyEvent;
+    FOnKeyPress: TKeyPressEvent;
+    FOnKeyUp: TKeyEvent;
     FOnEnter: TNotifyEvent;
     FOnExit: TNotifyEvent;
 
@@ -81,6 +87,9 @@ type
     function PointInRect(X, Y: Integer; R: TRect): Boolean;
   protected
     procedure Paint; override;
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    procedure KeyUp(var Key: Word; Shift: TShiftState); override;
+    procedure KeyPress(var Key: Char); override;
     procedure MouseEnter(var msg: TMessage); message CM_MOUSEENTER;
     procedure MouseLeave(var msg: TMessage); message CM_MOUSELEAVE;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -88,6 +97,8 @@ type
     procedure MouseMove (Shift: TShiftState; X, Y: Integer); override;
     procedure Resize; override;
     procedure CMEnabledChanged (var msg: TMessage); message CM_ENABLEDCHANGED;
+    procedure CMWantArrows(var Message: TMessage); message CM_WANTARROWS;
+    procedure WMGetDlgCode(var Message: TWMGetDlgCode); message WM_GETDLGCODE;
   public
     constructor Create(AOwner: TComponent); override;
     procedure GradientFillRect(Canvas: TCanvas; Rect: TRect; StartColor, EndColor: TColor; Direction: TFillDirection);
@@ -150,6 +161,9 @@ type
     property OnMouseDown: TNotifyEvent read FOnMouseDown write FOnMouseDown;
     property OnMouseMove: TNotifyEvent read FOnMouseMove write FOnMouseMove;
     property OnMouseUp: TNotifyEvent read FOnMouseUp write FOnMouseUp;
+    property OnKeyDown: TKeyEvent read FOnKeyDown write FOnKeyDown;
+    property OnKeyPress: TKeyPressEvent read FOnKeyPress write FOnKeyPress;
+    property OnKeyUp: TKeyEvent read FOnKeyUp write FOnKeyUp;
     property OnEnter: TNotifyEvent read FOnEnter write FOnEnter;
     property OnExit: TNotifyEvent read FOnExit write FOnExit;
 end;
@@ -281,7 +295,7 @@ begin
     FThumbWidth:= FThumbLength div 2;
     FAbsLength:= ClientHeight - FThumbWidth;
 
-    FPosition:= Round(FAbsPos * (FMax - FMin) / FAbsLength) + FMin;
+    //FPosition:= Round(FAbsPos * (FMax - FMin) / FAbsLength) + FMin;
     FAbsPos:= Round((FAbsLength / (FMax - FMin)) * (FPosition - FMin));
 
     FThumbRect.Left:= 4;
@@ -357,6 +371,28 @@ begin
   ScrBmp.Free;
 end;
 
+procedure TXiTrackBar.KeyDown(var Key: Word; Shift: TShiftState);
+begin
+  if Assigned(FOnKeyDown) then FOnKeyDown(Self, Key, Shift);
+end;
+
+procedure TXiTrackBar.KeyUp(var Key: Word; Shift: TShiftState);
+begin
+  case Key of
+    VK_LEFT, VK_DOWN: if (FOrientation = trHorizontal) then SetPosition(FPosition - 1) else SetPosition(FPosition + 1);
+    VK_RIGHT, VK_UP: if (FOrientation = trHorizontal) then SetPosition(FPosition + 1) else SetPosition(FPosition - 1);
+    VK_HOME: if (FOrientation = trHorizontal) then SetPosition(FMin) else SetPosition(FMax);
+    VK_END: if (FOrientation = trHorizontal) then SetPosition(FMax) else SetPosition(FMin);
+  end;
+
+  if Assigned(FOnKeyUp) then FOnKeyUp(Self, Key, Shift);
+end;
+
+procedure TXiTrackBar.KeyPress(var Key: Char);
+begin
+  if Assigned(FOnKeyPress) then FOnKeyPress(Self, Key);
+end;
+
 procedure TXiTrackBar.MouseEnter(var msg: TMessage);
 begin
   Paint;
@@ -395,6 +431,7 @@ begin
 
   Paint;
   if Assigned(FOnMouseDown) then FOnMouseDown(self);
+  self.SetFocus;
 end;
 
 procedure TXiTrackBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -443,6 +480,17 @@ procedure TXiTrackBar.CMEnabledChanged(var msg: TMessage);
 begin
   inherited;
   Paint;
+end;
+
+procedure TXiTrackBar.CMWantArrows(var Message: TMessage);
+begin
+  Message.Result := 1;
+end;
+
+procedure TXiTrackBar.WMGetDlgCode(var Message: TWMGetDlgCode);
+begin
+  inherited;
+  Message.Result := Message.Result or DLGC_WANTARROWS;
 end;
 
 procedure TXiTrackBar.SetColors(Index: Integer; Value: TColor);

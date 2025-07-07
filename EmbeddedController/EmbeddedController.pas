@@ -1,14 +1,15 @@
 unit EmbeddedController;
 
 {
-Recoded to Delphi 7: Serbinskis
-Original: https://github.com/Soberia/EmbeddedController
+  Recoded to Delphi 7: Serbinskis
+  Original: https://github.com/Soberia/EmbeddedController
+  MSR Guide - https://gist.github.com/mageddo/83cf22c8df32978f8458f649183ae0cd
 }
 
 interface
 
 uses
-  ECDriver;
+  WinRingDriver, Windows;
 
 const
   READ = 0;
@@ -22,10 +23,14 @@ const
   RD_EC = $80;
   WR_EC = $81;
 
+const
+  MSR_RAPL_POWER_UNIT = $606;
+  MSR_PKG_POWER_LIMIT = $610;
+
 type
   TEmbeddedController = class
     protected
-      driver: TECDriver;
+      driver: TWinRingDriver;
       function operation(mode, bRegister: Byte; var value: Byte): Boolean;
       function status(flag: Byte): Boolean;
     public
@@ -42,6 +47,8 @@ type
       function readByte(bRegister: Byte; var value: Byte): Boolean; overload;
       function readByte(bRegister: Byte): Byte; overload;
       function writeByte(bRegister, value: Byte): Boolean;
+      function readMsr(msrIndex: DWORD; var eax, edx: DWORD): Boolean;
+      function writeMsr(msrIndex: DWORD; eax, edx: DWORD): Boolean;
     end;
 
 implementation
@@ -56,7 +63,7 @@ begin
   retry := 5;
   timeout := 100;
 
-  driver := TECDriver.Create;
+  driver := TWinRingDriver.Create;
   driverLoaded := driver.initialize;
   driverFileExist := driver.driverFileExist;
 end;
@@ -96,6 +103,18 @@ end;
 function TEmbeddedController.writeByte(bRegister, value: Byte): Boolean;
 begin
   Result := operation(WRITE, bRegister, value);
+end;
+
+
+function TEmbeddedController.readMsr(msrIndex: DWORD; var eax, edx: DWORD): Boolean;
+begin
+  Result := self.driver.readMsr(msrIndex, eax, edx);
+end;
+
+
+function TEmbeddedController.writeMsr(msrIndex: DWORD; eax, edx: DWORD): Boolean;
+begin
+  Result := self.driver.writeMsr(msrIndex, eax, edx);
 end;
 
 

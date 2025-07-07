@@ -3,7 +3,7 @@ unit MSIController;
 interface
 
 uses
-  Windows, StrUtils, SysUtils, ActiveX, ComObj, Variants, EmbeddedController;
+  Windows, StrUtils, SysUtils, ActiveX, ComObj, Variants, Math, EmbeddedController;
 
 //Ignore Addresses: 46,48,4a,4c,cb,cc,dd,f4,c9,47,68
 
@@ -91,6 +91,9 @@ type
       procedure SetWebcamEnabled(bool: Boolean);
       procedure ToggleCoolerBoost;
       procedure ToggleWebcam;
+      procedure GetTdpLimits(out pl1Watt, pl2Watt: Integer);
+      procedure SetTdpLimits(pl1Watt, pl2Watt: Integer);
+      function IsTdpLocked: Boolean;
     end;
 
 implementation
@@ -385,6 +388,63 @@ end;
 procedure TMSIController.ToggleWebcam;
 begin
   SetWebcamEnabled(not IsWebcamEnabled);
+end;
+
+
+procedure TMSIController.GetTdpLimits(out pl1Watt, pl2Watt: Integer);
+var
+  eax, edx: DWORD;
+  powerUnit: Double;
+begin
+  powerUnit := 0.125;
+  pl1Watt := 0;
+  pl2Watt := 0;
+
+  // Read MSR_RAPL_POWER_UNIT (0x606) to get power unit
+  if self.ec.readMsr(MSR_RAPL_POWER_UNIT, eax, edx) then powerUnit := 1.0 / Power(2, (eax and $0F)) ; // bits 3:0 = power unit
+
+  // Read MSR_PKG_POWER_LIMIT (0x610)
+  if not self.ec.readMsr(MSR_PKG_POWER_LIMIT, eax, edx) then Exit;
+
+  // Convert raw values to watt values
+  pl1Watt := Round((eax and $7FFF) * powerUnit);
+  pl2Watt := Round((edx and $7FFF) * powerUnit);
+end;
+
+
+procedure TMSIController.SetTdpLimits(pl1Watt, pl2Watt: Integer);
+var
+  eax, edx: DWORD;
+  pl1Raw, pl2Raw: DWORD;
+  powerUnit: Double;
+begin
+  powerUnit := 0.125;
+  if self.ec.readMsr(MSR_RAPL_POWER_UNIT, eax, edx) then powerUnit := 1.0 / Power(2, (eax and $0F)); // bits 3:0 = power unit
+  if not self.ec.readMsr(MSR_PKG_POWER_LIMIT, eax, edx) then Exit;
+  if (edx and $80000000) <> 0 then Exit; //63:63 = MSR lock (bool) = 0b
+
+  // Convert watt values to raw values
+  pl1Raw := Round(pl1Watt / powerUnit);
+  pl2Raw := Round(pl2Watt / powerUnit);
+
+  // Update PL1 (bits 14:0) and set enable (bit 15)
+  eax := (eax and not $FFFF) or (pl1Raw or (1 shl 15));
+
+  // Update PL2 (bits 14:0 of EDX) and set enable (bit 15 of EDX = bit 47)
+  edx := (edx and not $FFFF) or (pl2Raw or (1 shl 15));
+
+  // Write back to MSR_PKG_POWER_LIMIT (0x610)
+  self.ec.writeMsr(MSR_PKG_POWER_LIMIT, eax, edx);
+end;
+
+
+function TMSIController.IsTdpLocked: Boolean;
+var
+  eax, edx: DWORD;
+begin
+  Result := True;
+  if not self.ec.readMsr(MSR_PKG_POWER_LIMIT, eax, edx) then Exit;
+  Result := (edx and $80000000) <> 0; //63:63 = MSR lock (bool) = 0b
 end;
 
 end.
