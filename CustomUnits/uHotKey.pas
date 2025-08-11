@@ -77,7 +77,10 @@ var
 begin
   for i := 0 to Callbacks.Count-1 do begin
     Callback := Callbacks.Items[i];
-    if (Callback.Key = Key) and Assigned(Callback.Callback) then Callback.Callback(Key, Callback.ShortCut, Callback.CustomValue);
+    if (Callback.Key <> Key) then Continue;
+    if (Callback.ShortCut = 0) then Continue;
+    if not Assigned(Callback.Callback) then Continue;
+    Callback.Callback(Key, Callback.ShortCut, Callback.CustomValue);
   end;
 end;
 
