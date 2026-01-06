@@ -1,7 +1,7 @@
 unit EmbeddedController;
 
 {
-  Recoded to Delphi 7: Serbinskis
+  Recoded to Delphi 7
   Original: https://github.com/Soberia/EmbeddedController
   MSR Guide - https://gist.github.com/mageddo/83cf22c8df32978f8458f649183ae0cd
 }
