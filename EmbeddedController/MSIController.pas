@@ -41,7 +41,7 @@ const //Vector 16 HX A14VHG
 
 const //Vector 16 HX A14VHG
   EC_SCENARIO_ADDRESS = $D2;
-  EC_CPU_TDP_ADDRESS_READ_ONLY = $EB;
+  EC_CPU_TDP_ADDRESS = $EB;
   EC_FAN_MODE_ADDRESS = $D4;
   EC_SCENARIO_BALANCED = $C1;
   EC_SCENARIO_SILENT = $C2;
@@ -49,6 +49,11 @@ const //Vector 16 HX A14VHG
   EC_FAN_MODE_AUTO = $0D;
   EC_FAN_MODE_SILENT = $1D;
   EC_FAN_MODE_ADVANCED = $8D;
+  EC_UNLOCKED_SILENT_ADDRESS = $E7;
+  EC_UNLOCKED_SILENT_VALUE = $C1; // 193
+  EC_LOCKED_SILENT_VALUE = $40;   // 64
+  EC_UNLOCKED_SILENT_TDP = $F0;   // 240
+  EC_LOCKED_SILENT_TDP = $0F;     // 15
 
 const
   MSI_BIOS_SERIAL_NUMBER_PREFIX: array [0..1] of String = ('9S7', 'K24');
@@ -57,7 +62,7 @@ const
 
 type
   TModeType = (modeAuto, modeBasic, modeAdvanced);
-  TScenarioType = (scenarioUnknown, scenarioSilent, scenarioBalanced, scenarioAuto, scenarioCoolerBoost, scenarioAdvanced);
+  TScenarioType = (scenarioUnknown, scenarioSilent, scenarioSilentUnlocked, scenarioBalanced, scenarioAuto, scenarioCoolerBoost, scenarioAdvanced);
   TFanSpeedArray = array[0..5] of Integer;
   PFanSpeedArray = ^TFanSpeedArray;
 
@@ -80,6 +85,7 @@ type
       function GetBasicValue: Integer;
       function GetFanMode: TModeType;
       function GetScenario: TScenarioType;
+      function IsSilentUnlocked(Retry: Integer): Boolean;
       function IsECLoaded(bEC: Boolean): Boolean;
       function IsCoolerBoostEnabled: Boolean;
       function IsWebcamEnabled: Boolean;
@@ -233,6 +239,7 @@ begin
   //Check for two simple scenarios
   bResult := self.ReadByte(EC_SCENARIO_ADDRESS);
   if (bResult = EC_SCENARIO_SILENT) then Result := scenarioSilent;
+  if ((Result = scenarioSilent) and self.IsSilentUnlocked(3)) then Result := scenarioSilentUnlocked;
   if (bResult = EC_SCENARIO_BALANCED) then Result := scenarioBalanced;
 
   //If we have extreme mode, we need to check which subclass of it we have
@@ -242,6 +249,18 @@ begin
 
   //If in the end we still have cooler boost, it means that we had issue reading data
   if (Result = scenarioCoolerBoost) then Result := GetScenario;
+end;
+
+
+function TMSIController.IsSilentUnlocked(Retry: Integer): Boolean;
+var
+  bResult: Byte;
+begin
+  Result := False;
+  bResult := self.ReadByte(EC_UNLOCKED_SILENT_ADDRESS);
+  if (bResult = EC_LOCKED_SILENT_VALUE) then Result := False;
+  if (bResult = EC_UNLOCKED_SILENT_VALUE) then Result := True;
+  if ((bResult <> EC_LOCKED_SILENT_VALUE) and (bResult <> EC_UNLOCKED_SILENT_VALUE) and (Retry > 0)) then Result := self.IsSilentUnlocked(Retry-1);
 end;
 
 //MSI Control Center Behaviour:
@@ -259,10 +278,18 @@ begin
 
   //Change scenario value, based on scenario
   if (Scenario = scenarioSilent) then self.WriteByte(EC_SCENARIO_ADDRESS, EC_SCENARIO_SILENT);
+  if (Scenario = scenarioSilentUnlocked) then self.WriteByte(EC_SCENARIO_ADDRESS, EC_SCENARIO_SILENT);
   if (Scenario = scenarioBalanced) then self.WriteByte(EC_SCENARIO_ADDRESS, EC_SCENARIO_BALANCED);
   if (Scenario = scenarioAuto) then self.WriteByte(EC_SCENARIO_ADDRESS, EC_SCENARIO_EXTREME);
   if (Scenario = scenarioCoolerBoost) then self.WriteByte(EC_SCENARIO_ADDRESS, EC_SCENARIO_EXTREME);
   if (Scenario = scenarioAdvanced) then self.WriteByte(EC_SCENARIO_ADDRESS, EC_SCENARIO_EXTREME);
+
+  //Change silent or silent unlocked values, we should also change TDP value
+  //Note: TDP does not change anything, it just for sync, if any other app depends on it
+  if (Scenario = scenarioSilent) then self.WriteByte(EC_UNLOCKED_SILENT_ADDRESS, EC_LOCKED_SILENT_VALUE);
+  if (Scenario = scenarioSilent) then self.WriteByte(EC_CPU_TDP_ADDRESS, EC_LOCKED_SILENT_TDP);
+  if (Scenario = scenarioSilentUnlocked) then self.WriteByte(EC_UNLOCKED_SILENT_ADDRESS, EC_UNLOCKED_SILENT_VALUE);
+  if (Scenario = scenarioSilentUnlocked) then self.WriteByte(EC_CPU_TDP_ADDRESS, EC_UNLOCKED_SILENT_TDP);
 
   //Change fan mode, only if in extreme mode (Extreme mode contains: Auto, Cooler Boost, Advanced)
   if (Scenario = scenarioAuto) then self.WriteByte(EC_FAN_MODE_ADDRESS, EC_FAN_MODE_AUTO);
