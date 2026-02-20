@@ -73,12 +73,12 @@ type
        EC: TEmbeddedController;
        hasEC: Boolean;
        function GetSerialNumber: String;
-       function ReadByte(bRegister: Byte): Byte;
-       procedure WriteByte(bRegister, Value: Byte); overload;
-       procedure WriteByte(bRegister, Value: Byte; Times: Integer); overload;
     public
       constructor Create;
       destructor Destroy; override;
+      function ReadByte(bRegister: Byte): Byte;
+      procedure WriteByte(bRegister, Value: Byte); overload;
+      procedure WriteByte(bRegister, Value: Byte; Times: Integer); overload;
 
       function GetGPUTemp: Byte;
       function GetCPUTemp: Byte;
@@ -277,9 +277,11 @@ begin
   if (Scenario <> scenarioUnknown) then self.SetCoolerBoostEnabled(Scenario = scenarioCoolerBoost);
 
   //Change scenario value, based on scenario
+  if (Scenario = scenarioSilent) then self.SetScenario(scenarioBalanced, -2, -2, nil, nil); // This helps to revert scenarioSilentUnlocked GPU LOCKING
+  if (Scenario = scenarioSilent) then Sleep(100); // Need to wait a little bit
   if (Scenario = scenarioSilent) then self.WriteByte(EC_SCENARIO_ADDRESS, EC_SCENARIO_SILENT);
   if (Scenario = scenarioSilentUnlocked) then self.WriteByte(EC_SCENARIO_ADDRESS, EC_SCENARIO_SILENT);
-  if (Scenario = scenarioBalanced) then self.WriteByte(EC_SCENARIO_ADDRESS, EC_SCENARIO_BALANCED);
+  if (Scenario = scenarioBalanced) then self.WriteByte(EC_SCENARIO_ADDRESS, EC_SCENARIO_BALANCED, 2);
   if (Scenario = scenarioAuto) then self.WriteByte(EC_SCENARIO_ADDRESS, EC_SCENARIO_EXTREME);
   if (Scenario = scenarioCoolerBoost) then self.WriteByte(EC_SCENARIO_ADDRESS, EC_SCENARIO_EXTREME);
   if (Scenario = scenarioAdvanced) then self.WriteByte(EC_SCENARIO_ADDRESS, EC_SCENARIO_EXTREME);
@@ -316,7 +318,7 @@ begin
   end;
 
   //If no custom fan speeds, and mode isn't advanced, then use default ones
-  if (not Assigned(CPUFanSpeed) and (Scenario <> scenarioAdvanced)) then begin
+  if (not Assigned(CPUFanSpeed) and (Scenario <> scenarioAdvanced) and (CpuFan0 <> -2)) then begin
     self.WriteByte(EC_FAN_1_1, EC_DEFAULT_CPU_FAN_SPEED[0]);
     self.WriteByte(EC_FAN_1_2, EC_DEFAULT_CPU_FAN_SPEED[1]);
     self.WriteByte(EC_FAN_1_3, EC_DEFAULT_CPU_FAN_SPEED[2]);
@@ -326,7 +328,7 @@ begin
   end;
 
   //If no custom fan speeds, and mode isn't advanced, then use default ones
-  if (not Assigned(CPUFanSpeed) and (Scenario <> scenarioAdvanced)) then begin
+  if (not Assigned(GPUFanSpeed) and (Scenario <> scenarioAdvanced) and (GpuFan0 <> -2)) then begin
     self.WriteByte(EC_FAN_2_1, EC_DEFAULT_GPU_FAN_SPEED[0]);
     self.WriteByte(EC_FAN_2_2, EC_DEFAULT_GPU_FAN_SPEED[1]);
     self.WriteByte(EC_FAN_2_3, EC_DEFAULT_GPU_FAN_SPEED[2]);
