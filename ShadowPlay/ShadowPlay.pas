@@ -3,7 +3,7 @@ unit ShadowPlay;
 interface
 
 uses
-  Windows, SysUtils, Classes, SPHelper;
+  Windows, SysUtils, Classes, TlHelp32, Menus, StrUtils, Math, SPHelper;
 
 const
   IRAction_ManualRecordStart = 1;
@@ -20,6 +20,9 @@ const
 const
   TEMP_FOLDER_NAME = '9343b833-e7af-42ea-8a61-31bc41eefe2b';
   DLL_NVSPAPI = 'C:\Program Files\NVIDIA Corporation\NVIDIA App\ShadowPlay\nvspapi64.dll';
+
+function QueryFullProcessImageNameW(hProcess: THandle; dwFlags: DWORD; lpExeName: LPWSTR; var lpdwSize: DWORD): BOOL; stdcall;
+  external kernel32 name 'QueryFullProcessImageNameW';
 
 type
   TCreateShadowPlayApiProxyInterface = packed record
@@ -161,21 +164,24 @@ type
       constructor Create;
       destructor Destroy; override;
       function IsLoaded: Boolean;
+      function IsGeforce: Boolean;
       function IsShadowPlayOn: Boolean;
       function IsInstantReplayOn: Boolean;
       function GetStatus: Integer;
+      function IsNvidiaOverlayRunning: Boolean;
       function GetInstantReplayStatus(manual: Boolean): Integer;
       function GetInstantReplayHotkey: TShortCut;
       function GetProperty(name: String): OleVariant;
       function SetProperty(name: String; value: OleVariant): Integer;
       function ToggleShadowPlay: Boolean;
       function ToggleInstantReplay: Boolean;
-      function EnableShadowPlay(bool: Boolean): Boolean;
-      procedure EnableInstantReplay(bool: Boolean);
+      function EnableShadowPlay(enabled: Boolean): Boolean;
+      procedure EnableInstantReplay(enabled: Boolean);
       procedure CreateNewCaptureSession;
       function ExecuteCaptureCommand(command: UINT): Integer;
     private
       loaded: Boolean;
+      nvidiaapp: Boolean;
       result: Integer;
       hNVSPapi: Cardinal;
       hProxyInterface: Pointer;
@@ -196,7 +202,8 @@ begin
   loaded := False;
 
   hNVSPapi := LoadLibrary(DLL_NVSPAPI);
-  if hNVSPapi = 0 then Exit;
+  if (hNVSPapi = 0) then nvidiaapp := self.IsNvidiaOverlayRunning;
+  if (hNVSPapi = 0) then Exit;
   @CreateShadowPlayApiInterface := GetProcAddress(hNVSPapi, 'CreateShadowPlayApiInterface');
   apiProxyInterface.api := AllocMem(4);
 
@@ -221,28 +228,40 @@ end;
 
 function TShadowPlay.IsLoaded: Boolean;
 begin
-  Result := loaded;
+  Result := loaded or nvidiaapp;
+end;
+
+
+function TShadowPlay.IsGeforce: Boolean;
+begin
+  Result := loaded and not nvidiaapp;
 end;
 
 
 function TShadowPlay.IsShadowPlayOn: Boolean;
 begin
   Result := (GetStatus = ShadowPlayStatus_On);
+  if (self.nvidiaapp) then Result := self.IsNvidiaOverlayRunning;
 end;
 
 
 function TShadowPlay.IsInstantReplayOn: Boolean;
+const
+  SP_REG_PATH = 'SOFTWARE\NVIDIA Corporation\Global\ShadowPlay\NVSPCAPS';
+  SP_REG_KEY  = '{1B1D3DAA-601D-49E5-8508-81736CA28C6D}';
 var
   srSearch: TWin32FindDataW;
   hDirecotry: THandle;
   TempDirectory: WideString;
 begin
   Result := False;
-  if not loaded then Exit;
+  LoadRegistryBoolean(Result, HKEY_CURRENT_USER, SP_REG_PATH, SP_REG_KEY); // For NVIDIA APP
+
+  if (not loaded) then Exit;
   TempDirectory := GetProperty('TempFilePath') + TEMP_FOLDER_NAME;
   hDirecotry := FindFirstFileW(PWideChar(TempDirectory + '\*.tmp'), srSearch);
   Result := (hDirecotry <> INVALID_HANDLE_VALUE);
-  if Result then Result := Result and not DeleteDirectory(TempDirectory); //This one lags
+  if Result then Result := Result and not DeleteDirectory(TempDirectory); // This one lags
   Windows.FindClose(hDirecotry);
 end;
 
@@ -260,10 +279,10 @@ begin
 end;
 
 
-//This shit not working, fucking some kinda invalid handle error
-//hProxyInterface is valid
-//record I think also is valid
-//hSession, this thing doesn't even matter
+// This shit not working, fucking some kinda invalid handle error
+// hProxyInterface is valid
+// record I think also is valid
+// hSession, this thing doesn't even matter
 function TShadowPlay.GetInstantReplayStatus(manual: Boolean): Integer;
 var
   value: TCaptureSessionValue_INT;
@@ -297,14 +316,74 @@ begin
 end;
 
 
+function TShadowPlay.IsNvidiaOverlayRunning: Boolean;
+const
+  PROCESS_QUERY_LIMITED_INFORMATION = $1000;
+  TARGET_RELATIVE_PATH = 'NVIDIA Corporation\NVIDIA App\CEF\NVIDIA Overlay.exe';
+var
+  Snapshot: THandle;
+  ProcEntry: TProcessEntry32W;
+  hProc: THandle;
+  PathLen: DWORD;
+  FullProcessPath: array[0..MAX_PATH] of WideChar;
+begin
+  Result := False;
+  Snapshot := CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  if (Snapshot = INVALID_HANDLE_VALUE) then Exit;
+
+  try
+    ProcEntry.dwSize := SizeOf(ProcEntry);
+    if (not Process32FirstW(Snapshot, ProcEntry)) then Exit;
+
+    repeat
+      hProc := OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, ProcEntry.th32ProcessID);
+      if (hProc = 0) then Continue;
+
+      try
+        PathLen := MAX_PATH;
+        if not QueryFullProcessImageNameW(hProc, 0, FullProcessPath, PathLen) then Continue;
+        if AnsiContainsText(WideCharToString(FullProcessPath), TARGET_RELATIVE_PATH) then begin Result := True; Break; end;
+      finally
+        CloseHandle(hProc);
+      end;
+      
+    until not Process32NextW(Snapshot, ProcEntry);
+  finally
+    CloseHandle(Snapshot);
+  end;
+end;
+
+
 function TShadowPlay.GetInstantReplayHotkey: TShortCut;
+const
+  SP_REG_PATH = 'SOFTWARE\NVIDIA Corporation\Global\ShadowPlay\NVSPCAPS';
 var
   i: Integer;
+  KeyCount, VKey: Integer;
   Keys: array[0..3] of Integer;
 begin
   Result := 0;
-  if not loaded then Exit;
-  for i := 0 to Length(Keys)-1 do Keys[i] := Integer(GetProperty('IRToggleHKey' + IntToStr(i)));
+  FillChar(Keys, SizeOf(Keys), 0);
+  if (not loaded and not nvidiaapp) then Exit;
+
+  if not LoadRegistryInteger(KeyCount, HKEY_CURRENT_USER, SP_REG_PATH, 'IRToggleHKeyCount') then begin
+    Result := Menus.ShortCut(VK_F10, [ssAlt, ssShift]);
+    if (nvidiaapp) then Exit;
+  end;
+
+  if (nvidiaapp and (KeyCount = 0)) then Exit; // This means the hotkeys are disabled
+
+  for i := 0 to Math.Min(KeyCount - 1, High(Keys)) do begin
+    if LoadRegistryInteger(VKey, HKEY_CURRENT_USER, SP_REG_PATH, 'IRToggleHKey' + IntToStr(i)) then Keys[i] := VKey;
+  end;
+
+  Result := FromVirtual(Keys);
+
+  if (not loaded) then Exit; // Next part only for legacy geeforce
+  KeyCount := Integer(GetProperty('IRToggleHKeyCount'));
+  if (KeyCount <= 0) then begin Result := 0; Exit; end;
+  FillChar(Keys, SizeOf(Keys), 0);
+  for i := 0 to Math.Min(KeyCount - 1, High(Keys)) do Keys[i] := Integer(GetProperty('IRToggleHKey' + IntToStr(i)));
   Result := FromVirtual(Keys);
 end;
 
@@ -349,12 +428,12 @@ end;
 function TShadowPlay.ToggleInstantReplay: Boolean;
 begin
   EnableInstantReplay(not IsInstantReplayOn);
-  Wait(100); //Need to wait for temp file to be created
+  Wait(100); // Need to wait for temp file to be created
   Result := IsInstantReplayOn;
 end;
 
 
-function TShadowPlay.EnableShadowPlay(bool: Boolean): Boolean;
+function TShadowPlay.EnableShadowPlay(enabled: Boolean): Boolean;
 var
   params: TEnableShadowPlayParams;
 begin
@@ -363,28 +442,28 @@ begin
   params.api_version := $10010;
   params.value := 1;
 
-  if bool
+  if enabled
     then Result := (api.EnableShadowPlay(hProxyInterface, params) = 0)
     else Result := (api.DisableShadowPlay(hProxyInterface, params) = 0);
 end;
 
 
-procedure TShadowPlay.EnableInstantReplay(bool: Boolean);
+procedure TShadowPlay.EnableInstantReplay(enabled: Boolean);
 var
   isOn: Boolean;
   Hotkey: TShortCut;
 begin
-  if not loaded then Exit;
+  if (not loaded and not nvidiaapp) then Exit;
   Hotkey := GetInstantReplayHotkey;
-  if Hotkey = 0 then Exit;
+  if (Hotkey = 0) then Exit;
 
   isOn := IsInstantReplayOn;
-  if (isOn and not bool) then SimulateHotkey(Hotkey);
-  if (not isOn and bool) then SimulateHotkey(Hotkey);
+  if (isOn and not enabled) then SimulateHotkey(Hotkey);
+  if (not isOn and enabled) then SimulateHotkey(Hotkey);
 end;
 
 
-//This shit also not working
+// This shit also not working
 function TShadowPlay.ExecuteCaptureCommand(command: UINT): Integer;
 var
   captureControlParams: TCaptureControlParams;
