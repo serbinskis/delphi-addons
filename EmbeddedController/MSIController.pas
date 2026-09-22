@@ -174,16 +174,26 @@ end;
 
 
 function TMSIController.ReadByte(bRegister: Byte): Byte;
+var
+  consecutiveFails: UInt64;
 begin
   Result := 255;
-  while (not EC.ReadByte(bRegister, Result)) or (Result = 255) do Sleep(1);
+  consecutiveFails := 0;
+
+  while (not EC.ReadByte(bRegister, Result)) or (Result = 255) do begin
+    Inc(consecutiveFails);
+    // Heartbeat warning every 1000 failed attempts so you can see it's alive and spinning
+    if (consecutiveFails mod 1000 = 0) then AllocConsole;
+    if (consecutiveFails mod 1000 = 0) then WriteLn(Format('WARNING: Register $%.2X has returned $FF for %d ms...', [bRegister, consecutiveFails]));
+    Sleep(1);
+  end;
 end;
 
 
 procedure TMSIController.WriteByte(bRegister, Value: Byte);
 begin
   while (self.ReadByte(bRegister) <> value) do EC.WriteByte(bRegister, value);
-  Sleep(1); //Do extra delay, sometimes it writes false positives
+  Sleep(1); // Do extra delay, sometimes it writes false positives
 end;
 
 
