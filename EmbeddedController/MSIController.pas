@@ -5,25 +5,26 @@ interface
 uses
   Windows, StrUtils, SysUtils, ActiveX, ComObj, Variants, Math, EmbeddedController;
 
-//Ignore Addresses: 46,48,4a,4c,cb,cc,dd,f4,c9,47,68
+// Ignore Addresses: 46,48,4a,4c,cb,cc,dd,f4,c9,47,68
 
 const
   EC_LOADED_RETRY = 20;
-  EC_WEBCAM_ADDRESS = $2E; //Deprecated GL65 9SE
-  EC_WEBCAM_ON = $4B; //Deprecated GL65 9SE
-  EC_WEBCAM_OFF = $49; //Deprecated GL65 9SE
+  EC_BATTERY_LEVEL_ADDRESS = $42;
+  EC_WEBCAM_ADDRESS = $2E; // Deprecated GL65 9SE
+  EC_WEBCAM_ON = $4B; // Deprecated GL65 9SE
+  EC_WEBCAM_OFF = $49; // Deprecated GL65 9SE
   EC_CB_ADDRESS = $98;
   EC_CB_ON = $80;
   EC_CB_OFF = $00;
-  EC_FANS_ADRRESS = $F4; //Deprecated GL65 9SE
-  EC_FANS_SPEED_ADRRESS = $F5; //Deprecated GL65 9SE
-  EC_FANS_MODE_AUTO = $0C; //Deprecated GL65 9SE
-  EC_FANS_MODE_BASIC = $4C; //Deprecated GL65 9SE
-  EC_FANS_MODE_ADVANCED = $8C; //Deprecated GL65 9SE
-  EC_GPU_TEMP_ADRRESS = $80;
-  EC_CPU_TEMP_ADRRESS = $68;
+  EC_FANS_ADRRESS = $F4; // Deprecated GL65 9SE
+  EC_FANS_SPEED_ADRRESS = $F5; // Deprecated GL65 9SE
+  EC_FANS_MODE_AUTO = $0C; // Deprecated GL65 9SE
+  EC_FANS_MODE_BASIC = $4C; // Deprecated GL65 9SE
+  EC_FANS_MODE_ADVANCED = $8C; // Deprecated GL65 9SE
+  EC_GPU_TEMP_ADRRESS = $80; // Deprecated 16 HX A14VHG
+  EC_CPU_TEMP_ADRRESS = $68; // Deprecated 16 HX A14VHG
 
-const //Vector 16 HX A14VHG
+const // Vector 16 HX A14VHG
   EC_FAN_1_0 = $71;
   EC_FAN_1_1 = $72;
   EC_FAN_1_2 = $73;
@@ -39,7 +40,7 @@ const //Vector 16 HX A14VHG
   EC_FAN_2_5 = $8E;
   EC_FAN_2_6 = $8F;
 
-const //Vector 16 HX A14VHG
+const // Vector 16 HX A14VHG
   EC_SCENARIO_ADDRESS = $D2;
   EC_CPU_TDP_ADDRESS = $EB;
   EC_FAN_MODE_ADDRESS = $D4;
@@ -82,6 +83,7 @@ type
 
       function GetGPUTemp: Byte;
       function GetCPUTemp: Byte;
+      function GetBatteryLevel: Byte;
       function GetBasicValue: Integer;
       function GetFanMode: TModeType;
       function GetScenario: TScenarioType;
@@ -130,8 +132,10 @@ begin
 
   if (not hasEC) then Exit;
 
+  // For some reason the EC doesn't have anymore GPU and CPU temp values, idk why
   for i := 1 to EC_LOADED_RETRY do begin
-    if (self.GetCPUTemp > 0) then Inc(j) else Inc(k);
+    WriteLn(self.GetBatteryLevel);
+    if (self.GetBatteryLevel > 0) then Inc(j) else Inc(k);
     Sleep(1);
   end;
 
@@ -202,6 +206,13 @@ function TMSIController.GetCPUTemp: Byte;
 begin
   if (not self.IsECLoaded(True)) then begin Result := 0; Exit; end;
   Result := self.ReadByte(EC_CPU_TEMP_ADRRESS);
+end;
+
+
+function TMSIController.GetBatteryLevel: Byte;
+begin
+  if (not self.IsECLoaded(True)) then begin Result := 0; Exit; end;
+  Result := self.ReadByte(EC_BATTERY_LEVEL_ADDRESS);
 end;
 
 
