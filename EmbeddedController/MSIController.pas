@@ -67,13 +67,14 @@ type
   TFanSpeedArray = array[0..5] of Integer;
   PFanSpeedArray = ^TFanSpeedArray;
 
-
 type
   TMSIController = class
     protected
        EC: TEmbeddedController;
        hasEC: Boolean;
        function GetSerialNumber: String;
+       function IsDebug: Boolean;
+       procedure WriteLog(const Msg: string; Alloc: Boolean);
     public
       constructor Create;
       destructor Destroy; override;
@@ -106,6 +107,8 @@ type
 
 implementation
 
+function GetConsoleWindow: HWND; stdcall; external kernel32;
+
 constructor TMSIController.Create;
 var
   i, j, k: Integer;
@@ -123,10 +126,13 @@ begin
     if hasEC then Break;
   end;
 
+  if (self.IsDebug {or true}) then AllocConsole;
   if (not hasEC) then Exit;
+  self.WriteLog(Format('[TMSIController] hasEC (Serial) -> %s', [BoolToStr(hasEC, True)]), false);
 
   for i := 1 to EC_LOADED_RETRY do begin
     hasEC := EC.ReadByte(0, bDummy);
+    self.WriteLog(Format('[TMSIController] hasEC (ReadByte) -> %s', [BoolToStr(hasEC, True)]), false);
     if hasEC then Break else Sleep(1);
   end;
 
@@ -134,12 +140,12 @@ begin
 
   // For some reason the EC doesn't have anymore GPU and CPU temp values, idk why
   for i := 1 to EC_LOADED_RETRY do begin
-    WriteLn(self.GetBatteryLevel);
     if (self.GetBatteryLevel > 0) then Inc(j) else Inc(k);
     Sleep(1);
   end;
 
   hasEC := (j > k);
+  self.WriteLog(Format('[TMSIController] hasEC (j > k) -> %s', [BoolToStr(hasEC, True)]), false);
 end;
 
 
@@ -147,6 +153,29 @@ destructor TMSIController.Destroy;
 begin
   EC.Destroy;
   inherited Destroy;
+end;
+
+
+function TMSIController.IsDebug: Boolean;
+var
+  i: Integer;
+begin
+  Result := False;
+
+  for i := 1 to ParamCount do begin
+    if SameText(ParamStr(i), '-MSI_DEBUG') then begin
+      Result := True;
+      Exit;
+    end;
+  end;
+end;
+
+
+procedure TMSIController.WriteLog(const Msg: string; Alloc: Boolean);
+begin
+  if (Alloc) then AllocConsole;
+  if (GetConsoleWindow = 0) then Exit;
+  WriteLn(Msg);
 end;
 
 
@@ -183,8 +212,7 @@ begin
   while (not EC.ReadByte(bRegister, Result)) or (Result = 255) do begin
     Inc(consecutiveFails);
     // Heartbeat warning every 1000 failed attempts so you can see it's alive and spinning
-    if (consecutiveFails mod 1000 = 0) then AllocConsole;
-    if (consecutiveFails mod 1000 = 0) then WriteLn(Format('WARNING: Register $%.2X has returned $FF for %d ms...', [bRegister, consecutiveFails]));
+    if (consecutiveFails mod 1000 = 0) then self.WriteLog(Format('[TMSIController] WARNING: Register $%.2X has returned $FF for %d ms...', [bRegister, consecutiveFails]), true);
     Sleep(1);
   end;
 end;
@@ -257,18 +285,18 @@ begin
   Result := scenarioCoolerBoost;
   if (self.IsCoolerBoostEnabled()) then Exit;
 
-  //Check for two simple scenarios
+  // Check for two simple scenarios
   bResult := self.ReadByte(EC_SCENARIO_ADDRESS);
   if (bResult = EC_SCENARIO_SILENT) then Result := scenarioSilent;
   if ((Result = scenarioSilent) and self.IsSilentUnlocked(3)) then Result := scenarioSilentUnlocked;
   if (bResult = EC_SCENARIO_BALANCED) then Result := scenarioBalanced;
 
-  //If we have extreme mode, we need to check which subclass of it we have
+  // If we have extreme mode, we need to check which subclass of it we have
   if (bResult = EC_SCENARIO_EXTREME) then bResult := self.ReadByte(EC_FAN_MODE_ADDRESS);
   if (bResult = EC_FAN_MODE_AUTO) then Result := scenarioAuto;
   if (bResult = EC_FAN_MODE_ADVANCED) then Result := scenarioAdvanced;
 
-  //If in the end we still have cooler boost, it means that we had issue reading data
+  // If in the end we still have cooler boost, it means that we had issue reading data
   if (Result = scenarioCoolerBoost) then Result := GetScenario;
 end;
 
@@ -284,20 +312,20 @@ begin
   if ((bResult <> EC_LOCKED_SILENT_VALUE) and (bResult <> EC_UNLOCKED_SILENT_VALUE) and (Retry > 0)) then Result := self.IsSilentUnlocked(Retry-1);
 end;
 
-//MSI Control Center Behaviour:
-//Silent: Changes Max CPU TDP To 15 (Automaitc), Changes Scenario Mode, Does Not Change Advanced Fan Speeds (Uses Default)
-//Balanced: Changes Scenario Mode, Does Not Affect Advanced Fan Speeds (Uses Default)
-//Auto: Changes Scenario Mode, Changes Fan Mode, Does Not Affect Advanced Fan Speeds (Uses Default)
-//Cooler Boost: Changes Scenario Mode, Enables Cooler Boost, Does Not Affect Advanced Fan Speeds (Uses Default)
-//Advanced: Changes Scenario Mode, Changes Fan Mode, Does Affect Advanced Fan Speeds (Uses Custom)
-//CPU_FAN_0, GPU_FAN_0: Used To Reset Fan Speeds, Is Not Persistent, Values Constantly Change
+// MSI Control Center Behaviour:
+// Silent: Changes Max CPU TDP To 15 (Automaitc), Changes Scenario Mode, Does Not Change Advanced Fan Speeds (Uses Default)
+// Balanced: Changes Scenario Mode, Does Not Affect Advanced Fan Speeds (Uses Default)
+// Auto: Changes Scenario Mode, Changes Fan Mode, Does Not Affect Advanced Fan Speeds (Uses Default)
+// Cooler Boost: Changes Scenario Mode, Enables Cooler Boost, Does Not Affect Advanced Fan Speeds (Uses Default)
+// Advanced: Changes Scenario Mode, Changes Fan Mode, Does Affect Advanced Fan Speeds (Uses Custom)
+// CPU_FAN_0, GPU_FAN_0: Used To Reset Fan Speeds, Is Not Persistent, Values Constantly Change
 
 procedure TMSIController.SetScenario(Scenario: TScenarioType; CpuFan0: Integer; GpuFan0: Integer; CPUFanSpeed: PFanSpeedArray; GPUFanSpeed: PFanSpeedArray);
 begin
   if (not self.IsECLoaded(True)) then Exit;
   if (Scenario <> scenarioUnknown) then self.SetCoolerBoostEnabled(Scenario = scenarioCoolerBoost);
 
-  //Change scenario value, based on scenario
+  // Change scenario value, based on scenario
   if (Scenario = scenarioSilent) then self.SetScenario(scenarioBalanced, -2, -2, nil, nil); // This helps to revert scenarioSilentUnlocked GPU LOCKING
   if (Scenario = scenarioSilent) then Sleep(100); // Need to wait a little bit
   if (Scenario = scenarioSilent) then self.WriteByte(EC_SCENARIO_ADDRESS, EC_SCENARIO_SILENT);
@@ -307,18 +335,19 @@ begin
   if (Scenario = scenarioCoolerBoost) then self.WriteByte(EC_SCENARIO_ADDRESS, EC_SCENARIO_EXTREME);
   if (Scenario = scenarioAdvanced) then self.WriteByte(EC_SCENARIO_ADDRESS, EC_SCENARIO_EXTREME);
 
-  //Change silent or silent unlocked values, we should also change TDP value
-  //Note: TDP does not change anything, it just for sync, if any other app depends on it
+  // Change silent or silent unlocked values, we should also change TDP value
+  // Note: TDP does not change anything, it just for sync, if any other app depends on it
+  // Note: In recent update TDP is not stable and is not always accessible, but it looks we can just not use it
+  //if (Scenario = scenarioSilent) then self.WriteByte(EC_CPU_TDP_ADDRESS, EC_LOCKED_SILENT_TDP);
+  //if (Scenario = scenarioSilentUnlocked) then self.WriteByte(EC_CPU_TDP_ADDRESS, EC_UNLOCKED_SILENT_TDP);
   if (Scenario = scenarioSilent) then self.WriteByte(EC_UNLOCKED_SILENT_ADDRESS, EC_LOCKED_SILENT_VALUE);
-  if (Scenario = scenarioSilent) then self.WriteByte(EC_CPU_TDP_ADDRESS, EC_LOCKED_SILENT_TDP);
   if (Scenario = scenarioSilentUnlocked) then self.WriteByte(EC_UNLOCKED_SILENT_ADDRESS, EC_UNLOCKED_SILENT_VALUE);
-  if (Scenario = scenarioSilentUnlocked) then self.WriteByte(EC_CPU_TDP_ADDRESS, EC_UNLOCKED_SILENT_TDP);
 
-  //Change fan mode, only if in extreme mode (Extreme mode contains: Auto, Cooler Boost, Advanced)
+  // Change fan mode, only if in extreme mode (Extreme mode contains: Auto, Cooler Boost, Advanced)
   if (Scenario = scenarioAuto) then self.WriteByte(EC_FAN_MODE_ADDRESS, EC_FAN_MODE_AUTO);
   if (Scenario = scenarioAdvanced) then self.WriteByte(EC_FAN_MODE_ADDRESS, EC_FAN_MODE_ADVANCED);
 
-  //If custom fan data, then we need to write also cpu fan speeds data (can be used in any mode, but better to only use in advanced)
+  // If custom fan data, then we need to write also cpu fan speeds data (can be used in any mode, but better to only use in advanced)
   if Assigned(CPUFanSpeed) then begin
     self.WriteByte(EC_FAN_1_1, Byte(CPUFanSpeed^[0]));
     self.WriteByte(EC_FAN_1_2, Byte(CPUFanSpeed^[1]));
@@ -328,7 +357,7 @@ begin
     self.WriteByte(EC_FAN_1_6, Byte(CPUFanSpeed^[5]));
   end;
 
-  //If custom fan speeds, then we need to write also gpu fan speeds data (can be used in any mode, but better to only use in advanced)
+  // If custom fan speeds, then we need to write also gpu fan speeds data (can be used in any mode, but better to only use in advanced)
   if Assigned(GPUFanSpeed) then begin
     self.WriteByte(EC_FAN_2_1, Byte(GPUFanSpeed^[0]));
     self.WriteByte(EC_FAN_2_2, Byte(GPUFanSpeed^[1]));
@@ -338,7 +367,7 @@ begin
     self.WriteByte(EC_FAN_2_6, Byte(GPUFanSpeed^[5]));
   end;
 
-  //If no custom fan speeds, and mode isn't advanced, then use default ones
+  // If no custom fan speeds, and mode isn't advanced, then use default ones
   if (not Assigned(CPUFanSpeed) and (Scenario <> scenarioAdvanced) and (CpuFan0 <> -2)) then begin
     self.WriteByte(EC_FAN_1_1, EC_DEFAULT_CPU_FAN_SPEED[0]);
     self.WriteByte(EC_FAN_1_2, EC_DEFAULT_CPU_FAN_SPEED[1]);
@@ -348,7 +377,7 @@ begin
     self.WriteByte(EC_FAN_1_6, EC_DEFAULT_CPU_FAN_SPEED[5]);
   end;
 
-  //If no custom fan speeds, and mode isn't advanced, then use default ones
+  // If no custom fan speeds, and mode isn't advanced, then use default ones
   if (not Assigned(GPUFanSpeed) and (Scenario <> scenarioAdvanced) and (GpuFan0 <> -2)) then begin
     self.WriteByte(EC_FAN_2_1, EC_DEFAULT_GPU_FAN_SPEED[0]);
     self.WriteByte(EC_FAN_2_2, EC_DEFAULT_GPU_FAN_SPEED[1]);
@@ -358,8 +387,8 @@ begin
     self.WriteByte(EC_FAN_2_6, EC_DEFAULT_GPU_FAN_SPEED[5]);
   end;
 
-  //We can change these values, to rapidly stop or accelerate fans
-  //Attempt writing multiple times, to ensure correct result
+  // We can change these values, to rapidly stop or accelerate fans
+  // Attempt writing multiple times, to ensure correct result
   if (CpuFan0 > -1) then self.WriteByte(EC_FAN_1_0, CpuFan0, 2);
   if (GpuFan0 > -1) then self.WriteByte(EC_FAN_2_0, GpuFan0, 2);
 end;
