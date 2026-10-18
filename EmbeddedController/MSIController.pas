@@ -127,8 +127,8 @@ begin
   end;
 
   if (self.IsDebug {or true}) then AllocConsole;
-  if (not hasEC) then Exit;
   self.WriteLog(Format('[TMSIController] hasEC (Serial) -> %s', [BoolToStr(hasEC, True)]), false);
+  if (not hasEC) then Exit;
 
   for i := 1 to EC_LOADED_RETRY do begin
     hasEC := EC.ReadByte(0, bDummy);
